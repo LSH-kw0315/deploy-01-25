@@ -81,6 +81,6 @@ jobs:
           comment: Deploy
           command: |
             mkdir -p /dockerProjects/blog
-            curl -o /dockerProjects/blog/zero_downtime_deploy.py https://raw.githubusercontent.com/tmdgjsdl1234/deploy-01-25/main/infraScript/zero_downtime_deploy.py
+            curl -o /dockerProjects/blog/zero_downtime_deploy.py https://raw.githubusercontent.com/LSH-kw0315/deploy-01-25/main/infraScript/zero_downtime_deploy.py
             chmod +x /dockerProjects/blog/zero_downtime_deploy.py
             /dockerProjects/blog/zero_downtime_deploy.py
