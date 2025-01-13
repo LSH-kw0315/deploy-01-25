@@ -21,6 +21,6 @@ public class HomeController {
     @GetMapping("/secretKey")
     @ResponseBody
     public String showSecretKey() {
-        return "secretKey : " + secretKey;
+        return "secretKey : " + secretKey+", 나의 비밀친구";
     }
 }
