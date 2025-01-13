@@ -21,7 +21,7 @@ class ServiceManager:
 
     # 현재 실행 중인 서비스를 찾는 함수
     def _find_current_service(self) -> None:
-        cmd: str = f"so"
+        cmd: str = f"ps aux | grep 'socat -t0 TCP-LISTEN:{self.socat_port}' | grep -v grep | awk '{{print $NF}}'"
         current_service: str = subprocess.getoutput(cmd)
         if not current_service:
             self.current_name, self.current_port = 'blog_2', self.services['blog_2']
