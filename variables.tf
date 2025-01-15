@@ -1,14 +1,13 @@
 variable "prefix" {
   description = "Prefix for all resources"
-  default     = "dev"
+  default     = "dev-21"
 }
-
 variable "region" {
   description = "region"
-  default     = "ap-northeast-2"
+  default     = "us-east-2"
 }
 
-variable "nickname" {
-  description = "nickname"
-  default     = "jhs512"
-}
+#variable "region" {
+#  description = "region"
+#  default     = "ap-northeast-2"
+#}

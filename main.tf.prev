@@ -12,18 +12,6 @@ terraform {
 provider "aws" {
   region = var.region
 }
-
-# AMI 데이터 리소스 선언  !!!(수정됨)
-data "aws_ami" "amzn2" {
-  most_recent = true
-
-  owners = ["amazon"]
-
-  filter {
-    name   = "name"
-    values = ["amzn2-ami-hvm-2.0.*-gp2"]
-  }
-}
 # AWS 설정 끝
 
 # VPC 설정 시작
@@ -31,7 +19,7 @@ resource "aws_vpc" "vpc_1" {
   cidr_block = "10.0.0.0/16"
 
   # 무조건 켜세요.
-  enable_dns_support   = true
+  enable_dns_support = true
   # 무조건 켜세요.
   enable_dns_hostnames = true
 
@@ -133,17 +121,6 @@ resource "aws_security_group" "sg_1" {
   }
 }
 
-# VPC 설정 끝
-
-# ROUTE 53 설정 시작
-resource "aws_route53_zone" "vpc_1_zone" {
-  vpc {
-    vpc_id = aws_vpc.vpc_1.id
-  }
-  name = "vpc-1.com"
-}
-# ROUTE 53 설정 끝
-
 # EC2 설정 시작
 
 # EC2 역할 생성
@@ -185,7 +162,7 @@ resource "aws_iam_instance_profile" "instance_profile_1" {
   name = "${var.prefix}-instance-profile-1"
   role = aws_iam_role.ec2_role_1.name
 }
-
+//ec2 인스턴스 내부 환경을 미리 설정해둔다.
 locals {
   ec2_user_data_base = <<-END_OF_FILE
 #!/bin/bash
@@ -193,46 +170,38 @@ yum install docker -y
 systemctl enable docker
 systemctl start docker
 
-# This overwrites any existing configuration in /etc/yum.repos.d/kubernetes.repo
-cat <<EOF | sudo tee /etc/yum.repos.d/kubernetes.repo
-[kubernetes]
-name=Kubernetes
-baseurl=https://pkgs.k8s.io/core:/stable:/v1.29/rpm/
-enabled=1
-gpgcheck=1
-gpgkey=https://pkgs.k8s.io/core:/stable:/v1.29/rpm/repodata/repomd.xml.key
-exclude=kubelet kubeadm kubectl cri-tools kubernetes-cni
-EOF
+curl -L https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m) -o /usr/local/bin/docker-compose
+chmod +x /usr/local/bin/docker-compose
 
-# Set SELinux in permissive mode (effectively disabling it)
-sudo setenforce 0
-sudo sed -i 's/^SELINUX=enforcing$/SELINUX=permissive/' /etc/selinux/config
+yum install git -y
 
-# Disable swap
-swapoff -a
-sed -i '/swap/s/^/#/' /etc/fstab
-
-# containerd setting
-containerd config default > /etc/containerd/config.toml
-sudo sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
-systemctl restart containerd
-
-sudo yum install -y kubelet kubeadm kubectl --disableexcludes=kubernetes
-sudo systemctl enable --now kubelet
+sudo dd if=/dev/zero of=/swapfile bs=128M count=32
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+sudo swapon -s
+sudo sh -c 'echo "/swapfile swap swap defaults 0 0" >> /etc/fstab'
 
 END_OF_FILE
 }
 
+# EC2 인스턴스 생성
 resource "aws_instance" "ec2_1" {
-  ami                         = data.aws_ami.amzn2.id # !!!(수정됨)
-  instance_type               = "t2.large"
-  subnet_id                   = aws_subnet.subnet_1.id
-  vpc_security_group_ids      = [aws_security_group.sg_1.id]
+  # 사용할 AMI ID
+  ami = "ami-04c596dcf23eb98d8"
+  # EC2 인스턴스 유형
+  instance_type = "t2.micro"
+  # 사용할 서브넷 ID
+  subnet_id = aws_subnet.subnet_1.id
+  # 적용할 보안 그룹 ID
+  vpc_security_group_ids = [aws_security_group.sg_1.id]
+  # 퍼블릭 IP 연결 설정
   associate_public_ip_address = true
 
-  # Assign IAM role to the instance
+  # 인스턴스에 IAM 역할 연결
   iam_instance_profile = aws_iam_instance_profile.instance_profile_1.name
 
+  # 인스턴스에 태그 설정
   tags = {
     Name = "${var.prefix}-ec2-1"
   }
@@ -240,94 +209,11 @@ resource "aws_instance" "ec2_1" {
   # 루트 볼륨 설정
   root_block_device {
     volume_type = "gp3"
-    volume_size = 32  # 볼륨 크기를 32GB로 설정
+    volume_size = 30  # 볼륨 크기를 30GB로 설정
   }
 
   # User data script for ec2_1
   user_data = <<-EOF
 ${local.ec2_user_data_base}
-hostnamectl set-hostname ec2-1
 EOF
 }
-
-# ec2-1 에 private 도메인 연결
-resource "aws_route53_record" "record_ec2-1_vpc-1_com" {
-  zone_id = aws_route53_zone.vpc_1_zone.zone_id
-  name    = "ec2-1.vpc-1.com"
-  type    = "A"
-  ttl     = "300"
-  records = [aws_instance.ec2_1.private_ip]
-}
-
-resource "aws_instance" "ec2_2" {
-  ami                         = data.aws_ami.amzn2.id # !!!(수정됨)
-  instance_type               = "t2.large"
-  subnet_id                   = aws_subnet.subnet_3.id
-  vpc_security_group_ids      = [aws_security_group.sg_1.id]
-  associate_public_ip_address = true
-
-  # Assign IAM role to the instance
-  iam_instance_profile = aws_iam_instance_profile.instance_profile_1.name
-
-  tags = {
-    Name = "${var.prefix}-ec2-2"
-  }
-
-  # 루트 볼륨 설정
-  root_block_device {
-    volume_type = "gp3"
-    volume_size = 32  # 볼륨 크기를 32GB로 설정
-  }
-
-  # User data script for ec2_2
-  user_data = <<-EOF
-${local.ec2_user_data_base}
-hostnamectl set-hostname ec2-2
-EOF
-}
-
-# ec2-2 에 private 도메인 연결
-resource "aws_route53_record" "record_ec2-2_vpc-1_com" {
-  zone_id = aws_route53_zone.vpc_1_zone.zone_id
-  name    = "ec2-2.vpc-1.com"
-  type    = "A"
-  ttl     = "300"
-  records = [aws_instance.ec2_2.private_ip]
-}
-
-resource "aws_instance" "ec2_3" {
-  ami                         = data.aws_ami.amzn2.id # !!!(수정됨)
-  instance_type               = "t2.large"
-  subnet_id                   = aws_subnet.subnet_3.id
-  vpc_security_group_ids      = [aws_security_group.sg_1.id]
-  associate_public_ip_address = true
-
-  # Assign IAM role to the instance
-  iam_instance_profile = aws_iam_instance_profile.instance_profile_1.name
-
-  tags = {
-    Name = "${var.prefix}-ec2-3"
-  }
-
-  # 루트 볼륨 설정
-  root_block_device {
-    volume_type = "gp3"
-    volume_size = 32  # 볼륨 크기를 32GB로 설정
-  }
-
-  # User data script for ec2_3
-  user_data = <<-EOF
-${local.ec2_user_data_base}
-hostnamectl set-hostname ec2-3
-EOF
-}
-
-# ec2-3 에 private 도메인 연결
-resource "aws_route53_record" "record_ec2-3_vpc-1_com" {
-  zone_id = aws_route53_zone.vpc_1_zone.zone_id
-  name    = "ec2-3.vpc-1.com"
-  type    = "A"
-  ttl     = "300"
-  records = [aws_instance.ec2_3.private_ip]
-}
-# EC2 설정 끝
